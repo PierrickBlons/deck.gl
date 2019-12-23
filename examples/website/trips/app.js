@@ -1,163 +1,157 @@
 /* global window */
-import React, {Component} from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {render} from 'react-dom';
 import {StaticMap} from 'react-map-gl';
-import {AmbientLight, PointLight, LightingEffect} from '@deck.gl/core';
 import DeckGL from '@deck.gl/react';
-import {PolygonLayer} from '@deck.gl/layers';
 import {TripsLayer} from '@deck.gl/geo-layers';
 
 // Set your mapbox token here
-const MAPBOX_TOKEN = process.env.MapboxAccessToken; // eslint-disable-line
+const MAPBOX_TOKEN = 'pk.eyJ1IjoicGllcnJpY2tibCIsImEiOiJjazRhMjBkcXQwMmhsM2VwMXkyM3JyZW54In0.qv1Lq36PUGxriIIbLUtovw'; // eslint-disable-line
 
 // Source data CSV
 const DATA_URL = {
-  BUILDINGS:
-    'https://raw.githubusercontent.com/uber-common/deck.gl-data/master/examples/trips/buildings.json', // eslint-disable-line
   TRIPS:
     'https://raw.githubusercontent.com/uber-common/deck.gl-data/master/examples/trips/trips-v7.json' // eslint-disable-line
 };
 
-const ambientLight = new AmbientLight({
-  color: [255, 255, 255],
-  intensity: 1.0
-});
-
-const pointLight = new PointLight({
-  color: [255, 255, 255],
-  intensity: 2.0,
-  position: [-74.05, 40.7, 8000]
-});
-
-const lightingEffect = new LightingEffect({ambientLight, pointLight});
-
-const material = {
-  ambient: 0.1,
-  diffuse: 0.6,
-  shininess: 32,
-  specularColor: [60, 64, 70]
-};
+const EVENT_URI = 'http://localhost:5000/Event';
 
 const DEFAULT_THEME = {
   buildingColor: [74, 80, 87],
   trailColor0: [253, 128, 93],
   trailColor1: [23, 184, 190],
-  material,
-  effects: [lightingEffect]
 };
 
-const INITIAL_VIEW_STATE = {
-  longitude: -74,
-  latitude: 40.72,
-  zoom: 13,
-  pitch: 45,
+let currentViewState = {
+  longitude: -4.880748,
+  latitude: 48.349953,
+  zoom: 8,
+  pitch: 0,
   bearing: 0
 };
 
-const landCover = [[[-74.0, 40.7], [-74.02, 40.7], [-74.02, 40.72], [-74.0, 40.72]]];
+const useAnimationFrame = callback => {
+  const requestRef = useRef();
+  const previousTimeRef = useRef();
 
-export default class App extends Component {
-  constructor(props) {
-    super(props);
-    this.state = {
-      time: 0
-    };
-  }
-
-  componentDidMount() {
-    this._animate();
-  }
-
-  componentWillUnmount() {
-    if (this._animationFrame) {
-      window.cancelAnimationFrame(this._animationFrame);
+  const animate = time => {
+    if(previousTimeRef.current != undefined) // Check if le previousTimeRef is defined
+    {
+      const deltaTime = time - previousTimeRef.current;
+      callback(deltaTime);
     }
-  }
+    previousTimeRef.current = time;
+    requestRef.current = requestAnimationFrame(animate);
+  };
 
-  _animate() {
-    const {
-      loopLength = 1800, // unit corresponds to the timestamp in source data
-      animationSpeed = 30 // unit time per second
-    } = this.props;
-    const timestamp = Date.now() / 1000;
-    const loopTime = loopLength / animationSpeed;
+  useEffect(() => {
+    animate();
+    
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    }
+  }, []);
+};
 
-    this.setState({
-      time: ((timestamp % loopTime) / loopTime) * loopLength
-    });
-    this._animationFrame = window.requestAnimationFrame(this._animate.bind(this));
-  }
+const Map = (props) => {
+  const [time, setTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
 
-  _renderLayers() {
-    const {
-      buildings = DATA_URL.BUILDINGS,
-      trips = DATA_URL.TRIPS,
-      trailLength = 180,
-      theme = DEFAULT_THEME
-    } = this.props;
+  useAnimationFrame((deltaTime) => {
+      setTime((time) => { 
+        if(isPlaying) { 
+            return (time + deltaTime * 0.1) % props.setup.loopLength;
+        }
+        else {
+          return 0;
+        }
+      });
+  });
 
+  const renderLayers = () => {
     return [
-      // This is only needed when using shadow effects
-      new PolygonLayer({
-        id: 'ground',
-        data: landCover,
-        getPolygon: f => f,
-        stroked: false,
-        getFillColor: [0, 0, 0, 0]
-      }),
       new TripsLayer({
         id: 'trips',
-        data: trips,
+        data: props.setup.trips,
         getPath: d => d.path,
         getTimestamps: d => d.timestamps,
-        getColor: d => (d.vendor === 0 ? theme.trailColor0 : theme.trailColor1),
+        getColor: d => (d.vendor === 0 ? props.setup.theme.trailColor0 : props.setup.theme.trailColor1),
         opacity: 0.3,
         widthMinPixels: 2,
         rounded: true,
-        trailLength,
-        currentTime: this.state.time,
-
+        trailLength: props.setup.trailLength,
+        currentTime: time,
         shadowEnabled: false
-      }),
-      new PolygonLayer({
-        id: 'buildings',
-        data: buildings,
-        extruded: true,
-        wireframe: false,
-        opacity: 0.5,
-        getPolygon: f => f.polygon,
-        getElevation: f => f.height,
-        getFillColor: theme.buildingColor,
-        material: theme.material
       })
     ];
   }
 
-  render() {
-    const {
-      viewState,
-      mapStyle = 'mapbox://styles/mapbox/dark-v9',
-      theme = DEFAULT_THEME
-    } = this.props;
-
-    return (
+  return (
       <DeckGL
-        layers={this._renderLayers()}
-        effects={theme.effects}
-        initialViewState={INITIAL_VIEW_STATE}
-        viewState={viewState}
+        layers={renderLayers()}
+        effects={props.setup.theme.effects}
+        initialViewState={currentViewState}
+        viewState={currentViewState}
+        onViewStateChange={({viewState}) => {
+          currentViewState = viewState;
+          deck.setProps({viewState: currentViewState});
+        }}
         controller={true}
       >
         <StaticMap
           reuseMaps
-          mapStyle={mapStyle}
+          mapStyle={props.setup.mapStyle}
           preventStyleDiffing={true}
-          mapboxApiAccessToken={MAPBOX_TOKEN}
+          mapboxApiAccessToken={props.setup.mapToken}
         />
       </DeckGL>
-    );
-  }
+  );
 }
+
+const App = () => {
+  const [tracks, setTracks] = useState([]);
+
+  const setupMap = {
+    trips : tracks,
+    trailLength : 10000,
+    theme : DEFAULT_THEME,
+    loopLength : 25000, // unit corresponds to the timestamp in source data
+    animationSpeed : 60, // unit time per second
+    viewState : currentViewState,
+    mapToken : MAPBOX_TOKEN,
+    mapStyle: 'mapbox://styles/mapbox/dark-v9',
+  };
+
+  async function fetchTrack(eventId, boatParticipantId) {
+    const tracksResult = await fetch(`${EVENT_URI}/${eventId}/boat/${boatParticipantId}/trace-hd?api-version=2.0`);
+    tracksResult.json()
+      .then(trackJson => { 
+          const firstTimestampOfTrack = new Date(trackJson.telemetry[0][0].timestamp).getTime() / 1000;
+          setTracks(tracks => [ ...tracks, 
+            {
+              vendor: 1,
+              path: trackJson.tracks.geometry.coordinates[0],
+              timestamps: trackJson.telemetry[0].map(telemetry => {
+                return (new Date(telemetry.timestamp).getTime() / 1000) - firstTimestampOfTrack;
+              })
+            }]
+          ); 
+        }
+      );
+  }
+
+  useEffect(() => {
+    fetchTrack(105, 5557);
+  });
+
+  return (
+    <Map setup={setupMap} />
+  )
+}
+
+export default App;
 
 export function renderToDOM(container) {
   render(<App />, container);
