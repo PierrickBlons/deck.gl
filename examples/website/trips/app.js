@@ -23,9 +23,9 @@ const DEFAULT_THEME = {
 };
 
 let currentViewState = {
-  longitude: -4.880748,
-  latitude: 48.349953,
-  zoom: 8,
+  longitude: 0, //-4.880748,
+  latitude: 0, //48.349953,
+  zoom: 2,
   pitch: 0,
   bearing: 0
 };
@@ -62,7 +62,7 @@ const Map = (props) => {
   useAnimationFrame((deltaTime) => {
       setTime((time) => { 
         if(isPlaying) { 
-            return (time + deltaTime * 0.1) % props.setup.loopLength;
+            return (time + deltaTime * 60) % props.setup.loopLength;
         }
         else {
           return 0;
@@ -96,7 +96,6 @@ const Map = (props) => {
         viewState={currentViewState}
         onViewStateChange={({viewState}) => {
           currentViewState = viewState;
-          deck.setProps({viewState: currentViewState});
         }}
         controller={true}
       >
@@ -115,20 +114,26 @@ const App = () => {
 
   const setupMap = {
     trips : tracks,
-    trailLength : 10000,
+    trailLength : 1000000,
     theme : DEFAULT_THEME,
-    loopLength : 25000, // unit corresponds to the timestamp in source data
+    loopLength : 5000000, // unit corresponds to the timestamp in source data
     animationSpeed : 60, // unit time per second
     viewState : currentViewState,
     mapToken : MAPBOX_TOKEN,
     mapStyle: 'mapbox://styles/mapbox/dark-v9',
   };
 
-  async function fetchTrack(eventId, boatParticipantId) {
+  async function fetchTracks(eventId) {
+    const eventDetailsResult = await fetch(`${EVENT_URI}/${eventId}`);
+    eventDetailsResult.json()
+      .then(eventDetails => eventDetails.eventBoats.forEach(eventBoat => fetchTrack(eventDetails, eventBoat.id)));
+  }
+
+  async function fetchTrack({id: eventId, startDate: eventStartDate }, boatParticipantId) {
     const tracksResult = await fetch(`${EVENT_URI}/${eventId}/boat/${boatParticipantId}/trace-hd?api-version=2.0`);
     tracksResult.json()
       .then(trackJson => { 
-          const firstTimestampOfTrack = new Date(trackJson.telemetry[0][0].timestamp).getTime() / 1000;
+          const firstTimestampOfTrack = new Date(eventStartDate).getTime() / 1000;
           setTracks(tracks => [ ...tracks, 
             {
               vendor: 1,
@@ -143,8 +148,8 @@ const App = () => {
   }
 
   useEffect(() => {
-    fetchTrack(105, 5557);
-  });
+    fetchTracks(19);
+  }, []);
 
   return (
     <Map setup={setupMap} />
