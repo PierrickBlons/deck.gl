@@ -8,12 +8,6 @@ import {TripsLayer} from '@deck.gl/geo-layers';
 // Set your mapbox token here
 const MAPBOX_TOKEN = 'pk.eyJ1IjoicGllcnJpY2tibCIsImEiOiJjazRhMjBkcXQwMmhsM2VwMXkyM3JyZW54In0.qv1Lq36PUGxriIIbLUtovw'; // eslint-disable-line
 
-// Source data CSV
-const DATA_URL = {
-  TRIPS:
-    'https://raw.githubusercontent.com/uber-common/deck.gl-data/master/examples/trips/trips-v7.json' // eslint-disable-line
-};
-
 const EVENT_URI = 'http://localhost:5000/Event';
 
 const DEFAULT_THEME = {
@@ -62,7 +56,7 @@ const Map = (props) => {
   useAnimationFrame((deltaTime) => {
       setTime((time) => { 
         if(isPlaying) { 
-            return (time + deltaTime * 60) % props.setup.loopLength;
+            return (time + deltaTime * props.setup.animationSpeed) % props.setup.loopLength;
         }
         else {
           return 0;
@@ -83,7 +77,8 @@ const Map = (props) => {
         rounded: true,
         trailLength: props.setup.trailLength,
         currentTime: time,
-        shadowEnabled: false
+        shadowEnabled: false,
+        wrapLongitude: true
       })
     ];
   }
@@ -116,8 +111,8 @@ const App = () => {
     trips : tracks,
     trailLength : 1000000,
     theme : DEFAULT_THEME,
-    loopLength : 5000000, // unit corresponds to the timestamp in source data
-    animationSpeed : 60, // unit time per second
+    loopLength : 50000000, // unit corresponds to the timestamp in source data
+    animationSpeed : 200, // unit time per second
     viewState : currentViewState,
     mapToken : MAPBOX_TOKEN,
     mapStyle: 'mapbox://styles/mapbox/dark-v9',
